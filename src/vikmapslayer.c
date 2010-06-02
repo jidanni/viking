@@ -126,9 +126,10 @@ VikLayerParam maps_layer_params[] = {
   { "alpha", VIK_LAYER_PARAM_UINT, VIK_LAYER_GROUP_NONE, N_("Alpha:"), VIK_LAYER_WIDGET_HSCALE, params_scales },
   { "autodownload", VIK_LAYER_PARAM_BOOLEAN, VIK_LAYER_GROUP_NONE, N_("Autodownload maps:"), VIK_LAYER_WIDGET_CHECKBUTTON },
   { "mapzoom", VIK_LAYER_PARAM_UINT, VIK_LAYER_GROUP_NONE, N_("Zoom Level:"), VIK_LAYER_WIDGET_COMBOBOX, params_mapzooms, NULL },
+  { "showtilegrid", VIK_LAYER_PARAM_BOOLEAN, VIK_LAYER_GROUP_NONE, N_("Show Tile Grid:"), VIK_LAYER_WIDGET_CHECKBUTTON },
 };
 
-enum { PARAM_MAPTYPE=0, PARAM_CACHE_DIR, PARAM_ALPHA, PARAM_AUTODOWNLOAD, PARAM_MAPZOOM, NUM_PARAMS };
+enum { PARAM_MAPTYPE=0, PARAM_CACHE_DIR, PARAM_ALPHA, PARAM_AUTODOWNLOAD, PARAM_MAPZOOM, PARAM_SHOWTILEGRID, NUM_PARAMS };
 
 static VikToolInterface maps_tools[] = {
   { N_("Maps Download"), (VikToolConstructorFunc) maps_layer_download_create, NULL, NULL, NULL,  
@@ -205,6 +206,7 @@ struct _VikMapsLayer {
   VikCoord *last_center;
   gdouble last_xmpp;
   gdouble last_ympp;
+  gboolean showtilegrid;
 
   gint dl_tool_x, dl_tool_y;
 
@@ -489,6 +491,7 @@ static gboolean maps_layer_set_param ( VikMapsLayer *vml, guint16 id, VikLayerPa
                           vml->xmapzoom = __mapzooms_x [data.u];
                           vml->ymapzoom = __mapzooms_y [data.u];
                         }else g_warning (_("Unknown Map Zoom")); break;
+    case PARAM_SHOWTILEGRID: vml->showtilegrid = data.b; break;
   }
   return TRUE;
 }
@@ -503,6 +506,7 @@ static VikLayerParamData maps_layer_get_param ( VikMapsLayer *vml, guint16 id, g
     case PARAM_ALPHA: rv.u = vml->alpha; break;
     case PARAM_AUTODOWNLOAD: rv.u = vml->autodownload; break;
     case PARAM_MAPZOOM: rv.u = vml->mapzoom_id; break;
+    case PARAM_SHOWTILEGRID: rv.u = vml->showtilegrid; break;
   }
   return rv;
 }
@@ -526,6 +530,7 @@ static VikMapsLayer *maps_layer_new ( VikViewport *vvp )
   vml->last_center = NULL;
   vml->last_xmpp = 0.0;
   vml->last_ympp = 0.0;
+  vml->showtilegrid = FALSE;
 
   vml->dl_right_click_menu = NULL;
   vml->license_notice_shown = FALSE;
@@ -751,6 +756,8 @@ static void maps_layer_draw_section ( VikMapsLayer *vml, VikViewport *vvp, VikCo
         start_download_thread ( vml, vvp, ul, br, REDOWNLOAD_NONE );
     }
 
+    GdkGC *black_gc = GTK_WIDGET(vvp)->style->black_gc;
+
     if ( vik_map_source_get_tilesize_x(map) == 0 && !existence_only ) {
       for ( x = xmin; x <= xmax; x++ ) {
         for ( y = ymin; y <= ymax; y++ ) {
@@ -767,6 +774,15 @@ static void maps_layer_draw_section ( VikMapsLayer *vml, VikViewport *vvp, VikCo
             yy -= (height/2);
 
             vik_viewport_draw_pixbuf ( vvp, pixbuf, 0, 0, xx, yy, width, height );
+
+            if (vml->showtilegrid) {
+              /* NB Don't use vik_viewport_draw_rectangle as it won't draw anything
+	         if some part of the rectangle is off screen */
+              vik_viewport_draw_line ( vvp, black_gc, xx, yy, width, yy );
+              vik_viewport_draw_line ( vvp, black_gc, xx, height, width, height );
+              vik_viewport_draw_line ( vvp, black_gc, xx, yy, xx, height );
+              vik_viewport_draw_line ( vvp, black_gc, width, yy, width, height );
+            }
           }
         }
       }
@@ -858,6 +874,31 @@ static void maps_layer_draw_section ( VikMapsLayer *vml, VikViewport *vvp, VikCo
           yy += tilesize_y;
         }
         xx += tilesize_x;
+      }
+
+      /* Grid drawing here so it gets drawn on top of the map */
+      /* Thus loop around x & y again, but this time separately */
+      /* Only showing grid for the current scale */
+      if (vml->showtilegrid) {
+
+        /* Draw single grid lines across the whole screen */
+        gint width = vik_viewport_get_width(vvp);
+        gint height = vik_viewport_get_height(vvp);
+        xx = xx_tmp; yy = yy_tmp;
+        gint base_xx = xx - (tilesize_x/2);
+        base_yy = yy - (tilesize_y/2);
+
+        xx = base_xx;
+        for ( x = ((xinc == 1) ? xmin : xmax); x != xend; x+=xinc ) {
+          vik_viewport_draw_line ( vvp, black_gc, xx, base_yy, xx, height );
+          xx += tilesize_x;
+        }
+
+        yy = base_yy;
+        for ( y = ((yinc == 1) ? ymin : ymax); y != yend; y+=yinc ) {
+          vik_viewport_draw_line ( vvp, black_gc, base_xx, yy, width, yy );
+          yy += tilesize_y;
+        }
       }
     }
 
