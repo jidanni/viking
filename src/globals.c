@@ -89,6 +89,10 @@ static VikLayerParam general_prefs[] = {
 static gchar * params_kml_export_units[] = {"Metric", "Statute", "Nautical", NULL};
 static gchar * params_gpx_export_trk_sort[] = {N_("Alphabetical"), N_("Time"), N_("Creation"), NULL };
 static gchar * params_gpx_export_wpt_symbols[] = {N_("Title Case"), N_("Lowercase"), NULL};
+static gchar * params_gpx_export_versions[] = {
+  N_("GPX 1.0"),
+  N_("GPX 1.1"),
+  NULL };
 
 static VikLayerParam io_prefs[] = {
   { VIK_LAYER_NUM_TYPES, VIKING_PREFERENCES_IO_NAMESPACE "kml_export_units", VIK_LAYER_PARAM_UINT, VIK_LAYER_GROUP_NONE, N_("KML File Export Units:"), VIK_LAYER_WIDGET_COMBOBOX, params_kml_export_units, NULL, NULL, NULL, NULL, NULL },
@@ -97,6 +101,8 @@ static VikLayerParam io_prefs[] = {
       N_("Save GPX Waypoint Symbol names in the specified case. May be useful for compatibility with various devices"), NULL, NULL, NULL },
   { VIK_LAYER_NUM_TYPES, VIKING_PREFERENCES_IO_NAMESPACE "gpx_export_creator", VIK_LAYER_PARAM_STRING, VIK_LAYER_GROUP_NONE, N_("GPX Creator:"), VIK_LAYER_WIDGET_ENTRY, NULL, NULL,
       N_("The creator value when writing a GPX file. Otherwise when blank a default is used."), NULL, NULL, NULL },
+  { VIK_LAYER_NUM_TYPES, VIKING_PREFERENCES_IO_NAMESPACE "gpx_export_version", VIK_LAYER_PARAM_UINT, VIK_LAYER_GROUP_NONE, N_("GPX Version:"), VIK_LAYER_WIDGET_COMBOBOX, params_gpx_export_versions, NULL,
+      NULL, NULL, NULL, NULL },
 };
 
 #ifndef WINDOWS
@@ -230,6 +236,9 @@ void a_vik_preferences_init ()
   tmp.s = "";
   a_preferences_register(&io_prefs[3], tmp, VIKING_PREFERENCES_IO_GROUP_KEY);
 
+  tmp.u = VIK_GPX_EXPORT_V1_0;
+  a_preferences_register(&io_prefs[4], tmp, VIKING_PREFERENCES_IO_GROUP_KEY);
+
 #ifndef WINDOWS
   tmp.s = "xdg-open";
   a_preferences_register(&io_prefs_non_windows[0], tmp, VIKING_PREFERENCES_IO_GROUP_KEY);
@@ -338,6 +347,12 @@ vik_gpx_export_wpt_sym_name_t a_vik_gpx_export_wpt_sym_name ( )
 const gchar* a_vik_gpx_export_creator ( )
 {
   return a_preferences_get(VIKING_PREFERENCES_IO_NAMESPACE "gpx_export_creator")->s;
+}
+
+vik_gpx_export_version_t a_vik_gpx_export_version ( )
+{
+  vik_gpx_export_version_t val = a_preferences_get(VIKING_PREFERENCES_IO_NAMESPACE "gpx_export_version")->u;
+  return val;
 }
 
 #ifndef WINDOWS

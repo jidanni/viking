@@ -5,7 +5,7 @@
  * Copyright (C) 2007, Quy Tonthat <qtonthat@gmail.com>
  * Copyright (C) 2008, Hein Ragas <viking@ragas.nl>
  * Copyright (C) 2009, Tal B <tal.bav@gmail.com>
- * Copyright (c) 2012-2014, Rob Norris <rw_norris@hotmail.com>
+ * Copyright (c) 2012-2015, Rob Norris <rw_norris@hotmail.com>
  *
  * Some of the code adapted from GPSBabel 1.2.7
  * http://gpsbabel.sf.net/
@@ -1162,12 +1162,24 @@ static void gpx_write_header( FILE *f )
   if ( g_strcmp0(creator, "") == 0 )
     creator = g_strdup_printf("Viking %s -- %s", PACKAGE_VERSION, PACKAGE_URL);
 
-  fprintf(f, "<?xml version=\"1.0\"?>\n"
-             "<gpx version=\"1.0\"\n");
-  fprintf(f, "creator=\"%s\"\n", creator);
-  fprintf(f,"xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n"
-            "xmlns=\"http://www.topografix.com/GPX/1/0\"\n"
-            "xsi:schemaLocation=\"http://www.topografix.com/GPX/1/0 http://www.topografix.com/GPX/1/0/gpx.xsd\">\n");
+  fprintf(f, "<?xml version=\"1.0\"?>\n");
+  if ( a_vik_gpx_export_version() == VIK_GPX_EXPORT_V1_0 ) {
+    fprintf(f, "<gpx version=\"1.0\"\n");
+    fprintf(f, "creator=\"%s\"\n", creator);
+    fprintf(f, "xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n"
+               "xmlns=\"http://www.topografix.com/GPX/1/0\"\n"
+               "xsi:schemaLocation=\"http://www.topografix.com/GPX/1/0 http://www.topografix.com/GPX/1/0/gpx.xsd\">\n");
+  }
+  else {
+    // Some kind of V1.1
+    fprintf(f, "<gpx version=\"1.1\"\n");
+    fprintf(f, "creator=\"%s\"\n", creator);
+    fprintf(f, "xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n"
+               "xmlns=\"http://www.topografix.com/GPX/1/1\"\n"
+               "xsi:schemaLocation=\"http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd");
+  }
+  // Finish this block including the '"'
+  fprintf(f, "\">\n");
   g_free(creator);
 }
 
@@ -1197,6 +1209,11 @@ void a_gpx_write_file ( VikTrwLayer *vtl, FILE *f, GpxWritingOptions *options, c
   gpx_write_header ( f );
 
   gchar *tmp;
+
+  if ( a_vik_gpx_export_version() >= VIK_GPX_EXPORT_V1_1 ) {
+    fprintf ( f, " <metadata>\n" );
+  }
+
   const gchar *name = vik_layer_get_name(VIK_LAYER(vtl));
   if ( name ) {
     tmp = entitize ( name );
@@ -1208,7 +1225,11 @@ void a_gpx_write_file ( VikTrwLayer *vtl, FILE *f, GpxWritingOptions *options, c
   if ( md ) {
     if ( md->author && strlen(md->author) > 0 ) {
       tmp = entitize ( md->author );
-      fprintf ( f, "  <author>%s</author>\n", tmp );
+      if ( a_vik_gpx_export_version() == VIK_GPX_EXPORT_V1_0 )
+        fprintf ( f, "  <author>%s</author>\n", tmp );
+      else
+        // In V1.1 author is in complexType "personType" - ATM only use the 'name' component
+        fprintf ( f, "  <author><name>%s</name></author>\n", tmp );
       g_free ( tmp );
     }
     if ( md->description && strlen(md->description) > 0) {
@@ -1226,6 +1247,10 @@ void a_gpx_write_file ( VikTrwLayer *vtl, FILE *f, GpxWritingOptions *options, c
       fprintf ( f, "  <keywords>%s</keywords>\n", tmp );
       g_free ( tmp );
     }
+  }
+
+  if ( a_vik_gpx_export_version() >= VIK_GPX_EXPORT_V1_1 ) {
+    fprintf ( f, " </metadata>\n" );
   }
 
   if ( vik_trw_layer_get_waypoints_visibility(vtl) || (options && options->hidden) ) {
