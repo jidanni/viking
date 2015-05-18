@@ -48,6 +48,8 @@
 #endif
 #include <time.h>
 
+// GPX 1.0 = http://www.topografix.com/GPX/1/0/gpx.xsd
+// GPX 1.1 = http://www.topografix.com/GPX/1/1/gpx.xsd
 typedef enum {
         tt_unknown = 0,
 
@@ -93,6 +95,8 @@ typedef enum {
         tt_trk_trkseg_trkpt_hdop,
         tt_trk_trkseg_trkpt_vdop,
         tt_trk_trkseg_trkpt_pdop,
+
+        tt_trk_extensions_gpxx_color, // Garmin Extension
 
         tt_waypoint,
         tt_waypoint_coord,
@@ -180,6 +184,10 @@ tag_mapping tag_path_map[] = {
         { tt_trk_trkseg_trkpt, "/gpx/rte/rtept" },
         { tt_trk_trkseg_trkpt_name, "/gpx/rte/rtept/name" },
         { tt_trk_trkseg_trkpt_ele, "/gpx/rte/rtept/ele" },
+
+        // GPX 1.1 Garmin Extension
+        { tt_trk_extensions_gpxx_color, "/gpx/trk/extensions/gpxx:TrackExtension/gpxx:DisplayColor" },
+        { tt_trk_extensions_gpxx_color, "/gpx/rte/extensions/gpxx:TrackExtension/gpxx:DisplayColor" },
 
         {0}
 };
@@ -326,6 +334,7 @@ static void gpx_start(UserDataT *ud, const char *el, const char **attr)
      case tt_trk_src:
      case tt_trk_type:
      case tt_trk_name:
+     case tt_trk_extensions_gpxx_color:
        g_string_erase ( c_cdata, 0, -1 ); /* clear the cdata buffer */
        break;
 
@@ -615,6 +624,16 @@ static void gpx_end(UserDataT *ud, const char *el)
        g_string_erase ( c_cdata, 0, -1 );
        break;
 
+     case tt_trk_extensions_gpxx_color:
+     {
+       GdkColor gclr;
+       if ( gdk_color_parse ( c_cdata->str, &gclr ) ) {
+         c_tr->has_color = TRUE;
+         c_tr->color = gclr;
+       }
+       g_string_erase ( c_cdata, 0, -1 );
+       break;
+     }
      default: break;
   }
 
@@ -654,6 +673,7 @@ static void gpx_cdata(void *dta, const XML_Char *s, int len)
     case tt_trk_trkseg_trkpt_hdop:
     case tt_trk_trkseg_trkpt_vdop:
     case tt_trk_trkseg_trkpt_pdop:
+    case tt_trk_extensions_gpxx_color:
     case tt_waypoint_name: /* .loc name is really description. */
       g_string_append_len ( c_cdata, s, len );
       break;
@@ -945,6 +965,7 @@ static void gpx_write_waypoint ( VikWaypoint *wp, GpxWritingContext *context )
     fprintf ( f, "  <url>%s</url>\n", tmp );
     g_free ( tmp );
   }
+  // This is really GPX1.1 (and not even correct XML) - TODO decide what if anything needs to change here...
   if ( wp->image )
   {
     gchar *tmp = NULL;
@@ -1082,6 +1103,65 @@ static void gpx_write_trackpoint ( VikTrackpoint *tp, GpxWritingContext *context
   fprintf ( f, "  </%spt>\n", (context->options && context->options->is_route) ? "rte" : "trk" );
 }
 
+typedef struct {
+  const char *rgb;
+  const char *color_name;
+} allowed_color_names_t;
+
+allowed_color_names_t allowed_color_names[] = {
+  { "#000000", "Black" },
+  { "#8B0000", "DarkRed" },
+  { "#013220", "DarkGreen" },
+  { "#9B870C", "DarkYellow" },
+  { "#00008B", "DarkBlue" },
+  { "#8B008B", "DarkMagenta" },
+  { "#008B8B", "DarkCyan" },
+  { "#D3D3D3", "LightGray" },
+  { "#A9A9A9", "DarkGray" },
+  { "#FF0000", "Red" },
+  { "#00FF00", "Green" },
+  { "#FFFF00", "Yellow" },
+  { "#0000FF", "Blue" },
+  { "#FF00FF", "Magenta" },
+  { "#00FFFF", "Cyan" },
+  { "#FFFFFF", "White" },
+  { NULL, NULL }
+};
+
+/**
+ * Currently only Garmin DisplayColor is supported
+ *
+ * Look for a colour that matches by the sum of distance squared for each RGB value
+ */
+static const gchar * nearest_colour_string ( GdkColor color )
+{
+  // Furthest away default value
+  gdouble distance = (255.0 * sqrt ( 3.0 ) );
+
+  guint ii = 0;
+  guint answer = 0;
+  for ( allowed_color_names_t *acn = allowed_color_names; acn->rgb; acn++) {
+    GdkColor ac;
+    if ( gdk_color_parse ( acn->rgb, &ac ) ) {
+      // First check for exact matches
+      if ( ((ac.red - color.red) == 0) && ((ac.green - color.green) == 0) && ((ac.blue - color.blue) == 0) ) {
+        answer = ii;
+        break;
+      }
+      else {
+        gdouble newdist = sqrt ( pow ((ac.red/256 - color.red/256), 2 ) +
+                                 pow ((ac.green/256 - color.green/256), 2 ) +
+                                 pow ((ac.blue/256 - color.blue/256), 2 ) );
+        if ( newdist < distance ) {
+          answer = ii;
+          distance = newdist;
+        }
+      }
+    }
+    ii++;
+  }
+  return allowed_color_names[answer].color_name;
+}
 
 static void gpx_write_track ( VikTrack *t, GpxWritingContext *context )
 {
@@ -1133,6 +1213,16 @@ static void gpx_write_track ( VikTrack *t, GpxWritingContext *context )
     tmp = entitize ( t->type );
     fprintf ( f, "  <type>%s</type>\n", tmp );
     g_free ( tmp );
+  }
+  
+  if ( a_vik_gpx_export_version() > VIK_GPX_EXPORT_V1_0 ) {
+    if ( t->has_color ) {
+      if ( a_vik_gpx_export_version() == VIK_GPX_EXPORT_V1_1_GARMIN ) {
+        fprintf ( f, "  <extensions>" );
+        fprintf ( f, "<gpxx:TrackExtension><gpxx:DisplayColor>%s</gpxx:DisplayColor></gpxx:TrackExtension>", nearest_colour_string(t->color) );
+        fprintf ( f, "</extensions>\n" );
+      }
+    }
   }
 
   /* No such thing as a rteseg! */
