@@ -1177,6 +1177,22 @@ static void gpx_write_header( FILE *f )
     fprintf(f, "xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n"
                "xmlns=\"http://www.topografix.com/GPX/1/1\"\n"
                "xsi:schemaLocation=\"http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd");
+    if ( a_vik_gpx_export_version() == VIK_GPX_EXPORT_V1_1_GARMIN ) {
+      // Extra Garmin stuff (as seen on Etrex20 output GPX)
+      // Unlikely this is really necessary, as most processing of a GPX won't read these online schemas at runtime
+      //  (and some of these URLs no longer work anyway)
+      // first extended line for xsi:schemaLocation
+      fprintf(f, " http://www.garmin.com/xmlschemas/GpxExtensions/v3"
+                 " http://www8.garmin.com/xmlschemas/GpxExtensionsv3.xsd"
+                 " http://www.garmin.com/xmlschemas/WaypointExtension/v1"
+                 " http://www8.garmin.com/xmlschemas/WaypointExtensionv1.xsd"
+                 " http://www.garmin.com/xmlschemas/TrackPointExtension/v1"
+                 " http://www.garmin.com/xmlschemas/TrackPointExtensionv1.xsd\"" );
+      // then even more xmlns
+      fprintf(f, " xmlns:gpxx=\"http://www.garmin.com/xmlschemas/GpxExtensions/v3\"\n"
+                 " xmlns:wptx1=\"http://www.garmin.com/xmlschemas/WaypointExtension/v1\"\n"
+                 " xmlns:gpxtpx=\"http://www.garmin.com/xmlschemas/TrackPointExtension/v1" );
+    }
   }
   // Finish this block including the '"'
   fprintf(f, "\">\n");

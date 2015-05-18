@@ -92,6 +92,7 @@ static gchar * params_gpx_export_wpt_symbols[] = {N_("Title Case"), N_("Lowercas
 static gchar * params_gpx_export_versions[] = {
   N_("GPX 1.0"),
   N_("GPX 1.1"),
+  N_("GPX 1.1 + Garmin Extensions"),
   NULL };
 
 static VikLayerParam io_prefs[] = {

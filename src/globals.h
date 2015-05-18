@@ -205,6 +205,7 @@ const gchar* a_vik_gpx_export_creator ( );
 typedef enum {
   VIK_GPX_EXPORT_V1_0,
   VIK_GPX_EXPORT_V1_1,
+  VIK_GPX_EXPORT_V1_1_GARMIN,
 } vik_gpx_export_version_t;
 
 vik_gpx_export_version_t a_vik_gpx_export_version ( );
