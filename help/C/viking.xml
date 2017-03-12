@@ -794,6 +794,7 @@ Layers supported by &appname; are:
 <listitem><para><xref linkend="Maps"/></para></listitem>
 <listitem><para><xref linkend="GeoRef"/></para></listitem>
 <listitem><para><xref linkend="MapnikRendering"/></para></listitem>
+<listitem><para><xref linkend="GeoClue"/></para></listitem>
 </itemizedlist>
 <para>
 For each layer there are a few standard options:
@@ -2140,6 +2141,8 @@ This opens a dialog to display various statistics about all tracks contained wit
 </section><!-- End Agg -->
 
 <xi:include href="georef_layer.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
+
+<xi:include href="geoclue_layer.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
 
 <xi:include href="mapnik_rendering_layer.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
 

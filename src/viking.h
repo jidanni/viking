@@ -55,6 +55,9 @@
 #ifdef HAVE_LIBMAPNIK
 #include "vikmapniklayer.h"
 #endif
+#ifdef HAVE_LIBGEOCLUE_2
+#include "vikgeocluelayer.h"
+#endif
 #include "clipboard.h"
 #include "dialog.h"
 #include "file.h"
