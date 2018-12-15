@@ -452,37 +452,38 @@ static void geoclue_empty_cb ( menu_array_layer values )
 	vik_trw_layer_delete_all_tracks ( vgl->trw );
 }
 
-static VikTrackpoint* create_trackpoint ( VikGeoclueLayer *vgl, VikCoord coord )
+static VikTrackpoint* create_trackpoint ( VikGeoclueLayer *vgl, VikCoord coord, GClueLocation *location )
 {
-	GClueLocation *location = gclue_simple_get_location ( vgl->simple );
-
-    // TODO protect from calling more than once a second? 
-	if ( vgl->record ) {
-
-		VikTrackpoint *tp = vik_trackpoint_new();
-		tp->newsegment = FALSE;
-		tp->timestamp = time(NULL);
-		tp->has_timestamp = ( tp->timestamp < 0 ) ? FALSE : TRUE;
-		gdouble speed = gclue_location_get_speed (location);
-		if ( speed >= 0 )
-			tp->speed = speed;
-		gdouble heading = gclue_location_get_heading (location);
-		if ( heading >= 0 )
-			tp->course = heading; // TODO confirm what units/ref brg
-		tp->fix_mode = VIK_GPS_MODE_2D;
-		gdouble altitude = gclue_location_get_altitude (location);
-		if ( altitude != -G_MAXDOUBLE ) {
-			tp->altitude = altitude;
-			tp->fix_mode = VIK_GPS_MODE_3D;      
-		}
-
-		tp->hdop = gclue_location_get_accuracy ( location ); // TODO confirm
-		tp->coord = coord;
-
-		vik_track_add_trackpoint ( vgl->track, tp, TRUE ); // Ensure bounds is recalculated
-		return tp;
+	VikTrackpoint *tp = vik_trackpoint_new();
+	tp->newsegment = FALSE;
+	tp->timestamp = time(NULL);
+	tp->has_timestamp = ( tp->timestamp < 0 ) ? FALSE : TRUE;
+	gdouble speed = gclue_location_get_speed (location);
+	if ( speed >= 0 )
+		tp->speed = speed;
+	gdouble heading = gclue_location_get_heading (location);
+	if ( heading >= 0 )
+		tp->course = heading; // TODO confirm what units/ref brg
+	tp->fix_mode = VIK_GPS_MODE_2D;
+	gdouble altitude = gclue_location_get_altitude (location);
+	if ( altitude != -G_MAXDOUBLE ) {
+		tp->altitude = altitude;
+		tp->fix_mode = VIK_GPS_MODE_3D;
 	}
-	return NULL;
+	GVariant *timestamp = gclue_location_get_timestamp (location);
+	if (timestamp) {
+		GTimeVal tv = { 0 };
+		g_variant_get (timestamp, "(tt)", &tv.tv_sec, &tv.tv_usec);
+		// ATM only support seconds (and truncates)
+		tp->has_timestamp = TRUE;
+		tp->timestamp = tv.tv_sec;
+	}
+
+	tp->hdop = gclue_location_get_accuracy ( location ); // TODO confirm
+	tp->coord = coord;
+
+	vik_track_add_trackpoint ( vgl->track, tp, TRUE ); // Ensure bounds is recalculated
+	return tp;
 }
 
 #define VIK_SETTINGS_GEOCLUE_STATUSBAR_FORMAT "geoclue_statusbar_format"
@@ -537,7 +538,7 @@ notify_location ( GClueSimple *simple,
 	VikWindow *vw = VIK_WINDOW(VIK_GTK_WINDOW_FROM_LAYER(vgl));
 	VikViewport *vvp = vik_window_viewport(vw);
 
-	GClueLocation *location = gclue_simple_get_location (vgl->simple);
+	GClueLocation *location = gclue_simple_get_location ( vgl->simple );
 	VikCoord coord;
 	struct LatLon ll;
 	ll.lat = gclue_location_get_latitude ( location );
@@ -571,7 +572,8 @@ notify_location ( GClueSimple *simple,
 		  update_all = FALSE;
 	}
 
-	vgl->trkpt = create_trackpoint ( vgl, coord );
+	vgl->trkpt =  vgl->record ? create_trackpoint ( vgl, coord, location ) : NULL;
+	vgl->first_trackpoint = FALSE;
 	
 	if ( vgl->trkpt ) {
 		if ( vgl->update_statusbar )
@@ -587,12 +589,15 @@ notify_active ( GClueClient *client,
                 GParamSpec *pspec,
                 gpointer    user_data )
 {
-  if ( gclue_client_get_active (client) )
-    return;
+	if ( gclue_client_get_active (client) )
+		return;
 
-  // TODO consider what other action to take?
-  // Auto turn off?
-  g_warning ( "%s geolocation disabled\n", __FILE__ );
+	g_warning ( "%s: geoclue no longer active\n", __FUNCTION__ );
+	// Deactivate
+	VikGeoclueLayer *vgl = (VikGeoclueLayer*)user_data;
+	vgl->tracking = FALSE;
+	vik_statusbar_set_message ( vik_window_get_statusbar (VIK_WINDOW(VIK_GTK_WINDOW_FROM_LAYER(vgl))),
+	                            VIK_STATUSBAR_INFO, _("GeoClue disabled") );
 }
 
 static void
@@ -606,7 +611,7 @@ on_simple_ready ( GObject      *source_object,
 
 	vgl->simple = gclue_simple_new_finish ( res, &error );
 	if ( error != NULL ) {
-		a_dialog_error_msg_extra ( VIK_GTK_WINDOW_FROM_LAYER(vgl), _("Failed to connect to service: %s"), error->message );
+		a_dialog_error_msg_extra ( VIK_GTK_WINDOW_FROM_LAYER(vgl), _("Failed to connect to GeoClue service: %s"), error->message );
 		g_error_free ( error );
 
 		vgl->first_trackpoint = FALSE;
@@ -615,9 +620,12 @@ on_simple_ready ( GObject      *source_object,
 		goto finish;
 	}
 
-	vgl->client = gclue_simple_get_client (vgl->simple);
-	g_object_ref (vgl->client);
-	
+	vgl->client = gclue_simple_get_client ( vgl->simple );
+	g_object_ref ( vgl->client );
+	g_debug ( "%s: Client object: %s", __FUNCTION__, g_dbus_proxy_get_object_path(G_DBUS_PROXY(vgl->client)) );
+
+	gclue_client_set_time_threshold ( vgl->client, 1 ); // Assume this is in seconds
+
 	GClueLocation *location = gclue_simple_get_location ( vgl->simple );
 	if ( vik_verbose )
 		libgeoclue_print_location ( location );
